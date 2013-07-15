@@ -1,0 +1,88 @@
+i dont think i just subtract two consetuive frames
+I need to determine what is a background frame first
+so maybe i average like the first 10-20 frames and store like a normalized version of it.
+then subtract all future frames from the normalized background frame
+
+problem with this is that the data[] is just raw info
+
+
+-----
+subtract two consecutive frames
+threshold the differenceFrame
+FDM(Frame Difference Mask) - frame subtraction and thresholding
+	FrameDifference[i] = 1 if FrameDifference[i]> Thresh
+	else its 0
+
+Background Registration - extract background information
+	pixels not moving for a long time are considered good background pixels;
+	
+	These 3 are initialized as 0	
+	Stationary Index (SI)  -- records possibility if pixel is in background
+	Background Indicator (BI)
+	Background Information (BG)
+	
+	
+	if FrameDifference(x,y,t)=0
+		SI(x,y,t) = SI(x,y,t-1)+1
+	else
+		SI(x,y,t)=0
+	
+	if SI(x,y,t)=Fth
+		BG(x,y,t)=I(x,y,t)
+	else
+		BG(x,y,t)=BG(x,y,t-1)
+
+	if SI(x,y,t)=Fth
+		BI=1
+	else
+		BI(x,y,t)=BI(x,y,t-1);
+
+	so we keep incrementing SI[i] if it doesnt change (if its probably a background pixel)
+	once SI[i] is large enough (equal to Fth) the pixel is added to the background buffer
+	BI is like a boolean vector stating whether a particular pixel is in the background or not
+
+	Now we perform another difference filter (Background Difference Filter)
+	BD(x,y,t) = abs(I(x,y,t) - BG(x,y,t))
+	if BD(x,y,t) > Th
+		BDM(x,y,t)=1
+	else
+		BDM(x,y,t)=0
+
+	
+
+Finding the right threshold
+	very tough to do automated
+	
+
+for(i=0;i<data.length;i++){
+	//Find FD[i]
+	difference[i] = frame2[i]-frame1[i];
+
+	//Find FDM[i]
+	if(difference[i]> Thresh)
+		difference[i]=1;
+	else
+		difference[i]=0;
+	
+	//update SI	
+	if(difference[i] = 1)
+		FilterTask.SI[i]++;
+	else
+		FilterTask.SI[i]=0;
+
+	//Update BG	
+	if(SI[i]==Fth)
+		FilteringTask.BG[i] = data[i]
+
+	backgroundDifference[i] = abs(data[i]-FilteringTask.BG[i])
+
+	if(backgroundDifference[i]>Th)
+		backgroundDifference[i]=1;
+	else
+		backgroundDifference[i]=0;
+}
+
+a different method would be the fuzzy c algorithm
+first need to do edge detection
+convert image to grayscale - this is going to cause problems because that means i have to decode the image first
+
