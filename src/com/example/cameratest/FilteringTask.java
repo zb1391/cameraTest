@@ -23,12 +23,17 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 	//private final WeakReference<ImageView> imageViewReference;
 	public static final int DIFFERENCE = 0;
 	public static final int BLUE = 1;
-	private static final int THREADCOUNT=2;
+	public static int THREADCOUNT=1;
 	private static int filterType=0;
+	public static long total=0;
 	private ImageView imageViewReference;
 	private Canvas canvas;
 	private Size previewSize;
 	private Camera.Parameters parameters;
+	
+	private static byte[] SI=null;
+	private static byte[] BG=null;
+	private final int Fth=6;
 	
 	//For MultiThreading
 	//I need to fix this tho
@@ -44,6 +49,15 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 		canvas = new Canvas();
 		this.previewSize=size;
 		parameters = p;
+		if(SI==null){
+			SI = new byte[MainActivity.getFromListHead().length];
+		}
+		if(BG==null){
+			BG = new byte[MainActivity.getFromListHead().length];
+		}
+		
+		//For MultiThreading (doesnt work)
+		/*
 		PixelList = new LinkedList<int[]>();
 		curThread=0;
 		isComplete=false;
@@ -58,7 +72,7 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 				}
 			}
 			
-		};
+		};*/
 	}
 	@Override
 	protected Bitmap doInBackground(Void... arg0) {
@@ -66,24 +80,7 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 		Bitmap bm = Bitmap.createBitmap(previewSize.height, previewSize.width, Bitmap.Config.ARGB_8888);
 		if(MainActivity.isListEmpty()==false){
 			Log.e(null,"filtertype is "+filterType);
-			/*byte[] data = MainActivity.popFromListHead();
-			int start,finish;
-			start=0;
-			finish=0;
-			for(int i=0;i<THREADCOUNT;i++){
-				PixelList.add(new int[previewSize.width*previewSize.height/THREADCOUNT]);
-				finish=finish+previewSize.height/THREADCOUNT;
-				ParallelFilter thread = new ParallelFilter(i,start,finish,data,PixelList.getLast());
-				thread.setParallelListener(mlistener);
-				Thread t = new Thread(thread);
-				t.run();
-			}
-			while(isComplete==false){};
-			int[] allPixels = merge(PixelList);
-			canvas.setBitmap(bm);
-			canvas.drawBitmap(allPixels,0,bm.getHeight(),0,0,bm.getHeight(),bm.getWidth(),true,new Paint());
-			return bm;
-			*/
+			
 			if(filterType==DIFFERENCE)
 				return differenceFilter(bm);
 			else if(filterType==BLUE)
@@ -102,7 +99,36 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 	        }
 	}
 	
+	private void parallelStuff(){
+		Bitmap bm = Bitmap.createBitmap(previewSize.height, previewSize.width, Bitmap.Config.ARGB_8888);
+		byte[] data = MainActivity.popFromListHead();
+		int start,finish;
+		start=0;
+		finish=0;
+		long startTime = System.currentTimeMillis();
+		for(int i=0;i<THREADCOUNT;i++){
+			//PixelList.add(new int[previewSize.width*previewSize.height/THREADCOUNT]);
+			finish=finish+previewSize.height/THREADCOUNT;
+			ParallelFilter thread = new ParallelFilter(i,start,finish,data);
+			thread.setParallelListener(mlistener);
+			Thread t = new Thread(thread);
+			t.run();
+			Log.d("THREADS","started thread "+i);
+		}
+		while(isComplete==false){};
+		Log.d(null,"finished all threads");
+		int[] allPixels = merge(PixelList);
+		canvas.setBitmap(bm);
+		canvas.drawBitmap(allPixels,0,bm.getHeight(),0,0,bm.getHeight(),bm.getWidth(),true,new Paint());
+		long endTime = System.currentTimeMillis();
+		total = endTime-startTime;
+		Log.i(null,"TOTAL TIME: "+total);
+	}
+	
+
+	
 	private Bitmap blueFilter2(Bitmap bm){
+		long starttime = System.currentTimeMillis();
 		int format = parameters.getPreviewFormat();
 		byte[] data = MainActivity.popFromListHead();
 		if(format == ImageFormat.NV21){
@@ -132,60 +158,16 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 					/*else
 						bitmap.setPixel(i, j, Color.BLUE);*/
 			}
+		long finishtime = System.currentTimeMillis();
+		total = finishtime- starttime;
 		return bitmap;
 		
 	}
 
-	private Bitmap blueFilter(Bitmap bm){
-		byte[] data = MainActivity.popFromListHead();
-		int numPixels = previewSize.width*previewSize.height;
-		// the buffer we fill up which we then fill the bitmap with
-		IntBuffer intBuffer = IntBuffer.allocate(numPixels);
-		// If you're reusing a buffer, next line imperative to refill from the start,
-		// if not good practice
-		intBuffer.position(0);
-		final byte alpha = (byte) 255;
-		
-		// Get each pixel, one at a time
-		for (int y = 0; y < previewSize.height; y++) {
-		    for (int x = 0; x < previewSize.width; x++) {
-		        // Get the Y value, stored in the first block of data
-		        // The logical "AND 0xff" is needed to deal with the signed issue
-		        int Y = data[y*previewSize.width + x] & 0xff;
 
-		        // Get U and V values, stored after Y values, one per 2x2 block
-		        // of pixels, interleaved. Prepare them as floats with correct range
-		        // ready for calculation later.
-		        int xby2 = x/2;
-		        int yby2 = y/2;
-		        float U = (float)(data[numPixels + 2*xby2 + yby2*previewSize.width] & 0xff) - 128.0f;
-		        float V = (float)(data[numPixels + 2*xby2 + 1 + yby2*previewSize.width] & 0xff) - 128.0f;
-		        // Do the YUV -> RGB conversion
-		        float Yf = 1.164f*((float)Y) - 16.0f;
-		        int R = (int)(Yf + 1.596f*V);
-		        int G = (int)(Yf - 0.813f*V - 0.391f*U);
-		        int B = (int)(Yf            + 2.018f*U);
-
-		        // Clip rgb values to 0-255
-		        R = R < 0 ? 0 : R > 255 ? 255 : R;
-		        G = G < 0 ? 0 : G > 255 ? 255 : G;
-		        B = B < 0 ? 0 : B > 255 ? 255 : B;
-
-		        // Put that pixel in the buffer
-		        intBuffer.put(alpha*16777216 + R*65536 + G*256 + B);
-		    }
-		}
-		// Get buffer ready to be read
-		intBuffer.flip();
-
-		// Push the pixel information from the buffer onto the bitmap.
-		bm.copyPixelsFromBuffer(intBuffer);
-		canvas.setBitmap(bm);
-		canvas.drawBitmap(intBuffer.array(),0,bm.getHeight(),0,0,bm.getHeight(),bm.getWidth(),true,new Paint());
-		return bm;
-	}
 	
 	private Bitmap differenceFilter(Bitmap bm){
+		long starttime = System.currentTimeMillis();
 		byte frame1[] = MainActivity.popFromListHead();
 		byte frame2[] = MainActivity.getFromListHead();
 		if(frame1.length!=frame2.length){
@@ -194,14 +176,44 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 		}
 		else{
 			int difference[] = new int[frame1.length];
+			int bdifference[] = new int[frame1.length];
 			Log.i(null,"Subtracting the two frames");
 			int diff;
 			for(int i =0; i<frame1.length;i++){
+				//Find FD[i]
 				diff= (Math.abs(frame2[i]-frame1[i]));
 				difference[i]=Color.rgb(diff,diff,diff);
+				
+				//Find FDM[i]
+				if(Color.red(difference[i])>MainActivity.getBrightness())
+					difference[i]=Color.WHITE;
+				else
+					difference[i]=Color.BLACK;
+				
+				//Update SI[i]
+				if(difference[i]==Color.WHITE)
+					SI[i]++;
+				else
+					SI[i]=0;
+				
+				//Update BG[i]
+				if(SI[i]==Fth)
+					BG[i]=frame2[i];
+				
+				//find BD
+				bdifference[i]=Math.abs(frame2[i]-BG[i]);
+				
+				//find BDM
+				if(Color.red(bdifference[i])>MainActivity.getBrightness())
+					bdifference[i]=Color.WHITE;
+				else
+					bdifference[i]=Color.BLACK;
+				
 			}
 			canvas.setBitmap(bm);
 			canvas.drawBitmap(difference,0,bm.getHeight(),0,0,bm.getHeight(),bm.getWidth(),true,new Paint());
+			long finishtime = System.currentTimeMillis();
+			total = finishtime-starttime;
 			return bm;
 		
 		}
@@ -229,14 +241,13 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 		private int start;
 		private int finish;
 		private byte[] data;
-		private int[] pixels;
 		private ParallelListener listener;
-		public ParallelFilter(int id,int start, int finish,byte[] data,int[] pixels){
+		public ParallelFilter(int id,int start, int finish,byte[] data){
 			this.id=id;
 			this.data=data;
 			this.start=start;
 			this.finish=finish;
-			this.pixels=pixels;
+			
 		}
 		
 		public void setParallelListener(ParallelListener listener){
@@ -253,8 +264,11 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             yuv.compressToJpeg( rect, 100, outputStream );
             bm = BitmapFactory.decodeByteArray( outputStream.toByteArray(), 0, outputStream.size() );
-       
+            Log.d("THREADS","thread "+id+" finished decode byte array");
 			Bitmap bitmap = bm.copy(bm.getConfig(), true);
+			
+			PixelList.add(id, new int[bitmap.getWidth()*bitmap.getHeight()]);
+			
 			for(int i=0;i<bm.getWidth();i++){
 				for(int j=start;j<finish;j++){
 					int pixel = bitmap.getPixel(i, j);
@@ -267,7 +281,9 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 							bitmap.setPixel(i, j, Color.BLACK);
 				}
 			}
-			bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
+			Log.d("THREADS",id+" bitmap size "+(bitmap.getWidth()*bitmap.getHeight()));
+			Log.d("THREADS",id+" pixel size "+PixelList.get(id).length);
+			bitmap.getPixels(PixelList.get(id), 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
 			//now i have the pixels for for part of the bitmap(0-bm.width,start-finish)
 			//i need to decide what to do with these pixels from the sub threads
 			//once all processing finishes, the FilteringTask needs to store them
@@ -277,6 +293,7 @@ public class FilteringTask extends AsyncTask<Void,Void,Bitmap>{
 			
 			//once all threads finish i combine them
 			//so do something like thread.onComplete()
+			Log.d("THREADS","thread "+id+" finished processing");
 			listener.onThreadComplete();
 		}
 		

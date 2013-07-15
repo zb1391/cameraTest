@@ -92,6 +92,8 @@ public class MainActivity extends Activity
 				// TODO Auto-generated method stub
 				//if(arg0.getId()==R.id.CaptureButton)
 					FilteringTask.setFilter();
+					
+					
 				/*int dataBufferSize=(int)(previewSize.height*previewSize.width*
 	                    (ImageFormat.getBitsPerPixel(camera.getParameters().getPreviewFormat())/8.0));
 					frames = new LinkedList<byte[]>();
@@ -174,12 +176,15 @@ public class MainActivity extends Activity
                     	//so i need to change the framerate on the filtering task
                     	//for just differenceFilter framerate/2 works well
                     	//for Y-filter framerate
-                    	if(count>=(double)framerate*.6){
+                    	TextView total = (TextView) findViewById(R.id.ThreadInfo);
+                    	total.setText("RunTime: "+FilteringTask.total);
+                    	if(count>(double)framerate*.1){
                     		count=0;
-                    		if(frames.size()>13){
+                    		if(frames.size()>40){
                     			Toast.makeText(getApplicationContext(), "Refreshing filter queue", Toast.LENGTH_SHORT).show();
+                    			byte[] last = frames.getLast();
                     			frames = new LinkedList<byte[]>();
-                    			frames.add(new byte[data.length]);
+                    			frames.add(last);
                     		}
                     	}
                     	
